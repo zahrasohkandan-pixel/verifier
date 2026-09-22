@@ -13,32 +13,46 @@ export const useCustomMutation = <
   TData = unknown,
   TError = unknown,
   TVariables = unknown,
-  TContext = unknown
+  TContext = unknown,
 >(
   mutationKey: MutationKey,
   mutationFn: MutationFunction<TData, TVariables>,
   options?: Omit<
     UseMutationOptions<TData, TError, TVariables, TContext>,
     "mutationKey" | "mutationFn"
-  >
-): UseMutationResult<TData, TError, TVariables, TContext> => {
+  >,
+): UseMutationResult<TData, TError, TVariables, TContext> & {
+  invalidate: () => void;
+} => {
+  const invalidate = () => {
+    queryClient.invalidateQueries(["CustomMutation", mutationKey]);
+    queryClient.invalidateQueries(["CustomMutationError", mutationKey]);
+  };
+
   const queryClient = useQueryClient();
   const query = useQuery<TData, TError>(
     ["CustomMutation", mutationKey],
     async () => await Promise.resolve(false as unknown as TData),
-    { retry: false, cacheTime: Infinity, staleTime: Infinity }
+    {
+      retry: false,
+      cacheTime: Infinity,
+      staleTime: Infinity,
+    },
   );
   const queryError = useQuery<TError, TData>(
     ["CustomMutationError", mutationKey],
     async () => await Promise.resolve(false as unknown as TError),
-    { retry: false, cacheTime: Infinity, staleTime: Infinity }
+    {
+      retry: false,
+      cacheTime: Infinity,
+      staleTime: Infinity,
+    },
   );
   const mutation = useMutation<TData, TError, TVariables, TContext>(
     mutationKey,
     async (...params) => {
       // TODO maybe sometimes invalidation should be optional?
-      queryClient.invalidateQueries(["CustomMutation", mutationKey]);
-      queryClient.invalidateQueries(["CustomMutationError", mutationKey]);
+      invalidate();
 
       queryClient.setQueryData(["CustomMutationError", mutationKey], false);
       return await mutationFn(...params);
@@ -53,7 +67,7 @@ export const useCustomMutation = <
         queryClient.setQueryData(["CustomMutationError", mutationKey], err);
         if (options?.onError) options.onError(err, variables, context);
       },
-    }
+    },
   );
   const isLoading = useIsMutating(mutationKey);
 
@@ -66,5 +80,8 @@ export const useCustomMutation = <
     isLoading: !!isLoading,
     error: queryError.data,
     isError: !!queryError.data,
-  } as UseMutationResult<TData, TError, TVariables, TContext>;
+    invalidate: invalidate,
+  } as UseMutationResult<TData, TError, TVariables, TContext> & {
+    invalidate: () => void;
+  };
 };

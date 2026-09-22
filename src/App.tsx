@@ -1,45 +1,125 @@
 import "./App.css";
-import AddressInput from "./components/AddressInput";
-import ContractInfo from "./components/ContractInfo";
-import Spacer from "./components/Spacer";
-import TopBar from "./components/TopBar";
-import ContractProofInfo from "./components/ContractProofInfo";
+import { TopBar } from "./components/TopBar";
 import { useLoadContractProof } from "./lib/useLoadContractProof";
 import ContractSourceCode from "./components/ContractSourceCode";
-import AddSources from "./components/AddSources";
-import SubmitContractSteps from "./components/SubmitContractSteps";
+import { useOverride } from "./lib/useOverride";
+import { useFileStore } from "./lib/useFileStore";
+import { useResetState } from "./lib/useResetState";
+import { styled } from "@mui/system";
+import { Backdrop, Box } from "@mui/material";
+import { useContractAddress } from "./lib/useContractAddress";
+import React, { useEffect, useRef, useState } from "react";
+import { ContractBlock } from "./components/ContractBlock";
+import { CompilerBlock } from "./components/CompilerBlock";
+import { AddSourcesBlock } from "./components/AddSourcesBlock";
+import { PublishProof } from "./components/PublishProof";
+import { Footer } from "./components/Footer";
+import { CenteringWrapper } from "./components/footer.styled";
+import { useNavigate } from "react-router-dom";
+
+const AppBox = styled(Box)({});
+
+const ContentBox = styled(Box)({
+  position: "relative",
+  maxWidth: 1160,
+  width: "100%",
+  margin: "auto",
+});
+
+const PositionedContent = styled(Box)({
+  position: "absolute",
+  width: "100%",
+  top: -141,
+  left: 0,
+});
+
+const ContractDataBox = styled(Box)({
+  display: "flex",
+  justifyContent: "space-between",
+});
+
+const OverflowingBox = styled(Box)({
+  boxSizing: "border-box",
+  maxWidth: 1160,
+  width: "100%",
+  marginTop: 20,
+  backgroundColor: "#fff",
+  borderRadius: 20,
+  padding: 20,
+  color: "#000",
+});
 
 function App() {
-  const { isLoading, data: proofData } = useLoadContractProof();
+  const { isLoading, data: proofData, error } = useLoadContractProof();
+  const [isDragging, setIsDragging] = useState(false);
+  const canOverride = useOverride();
+  const { isAddressValid } = useContractAddress();
+  const { hasFiles } = useFileStore();
+  const scrollToRef = useRef();
+
+  useResetState();
+
+  useEffect(() => {
+    window.scrollTo({ behavior: "auto", top: scrollToRef.current?.["offsetTop"] });
+  }, [window.location.pathname]);
 
   return (
-    <div>
-      <div className="BackgroundOverlay"></div>
-      <div className="App">
-        <a href="/EQDerEPTIh0O8lBdjWc6aLaJs5HYqlfBN2Ruj1lJQH_6vcaZ">Verified</a>
-        <a href="/EQC3dNlesgVD8YbAazcauIrXBPfiVhMMr5YYk2in0Mtsz0Bz">Verified2</a>
-        <a href="/EQBuOkznvkh_STO7F8W6FcoeYhP09jjO1OeXR2RZFkN6w7NR">Unverified</a>
-        <TopBar />
-        <h2 style={{ textAlign: "center" }}>Smart Contract Verifier</h2>
-        <AddressInput />
-        <Spacer space={40} />
-        {isLoading && <div>Loading...</div>}
-        {!isLoading && (
-          <div style={{ display: "flex", gap: 20 }}>
-            <ContractInfo />
-            {proofData && proofData.hasOnchainProof && <ContractProofInfo />}
-          </div>
-        )}
-        {proofData && !proofData.hasOnchainProof && (
-          <>
-            <Spacer space={40} />
-            <SubmitContractSteps />
-          </>
-        )}
-        <Spacer space={40} />
-        {proofData && <ContractSourceCode />}
-      </div>
-    </div>
+    <AppBox
+      onDragEnter={() => setIsDragging(true)}
+      onDrop={() => setIsDragging(false)}
+      onClick={() => setIsDragging(false)}>
+      <Backdrop
+        sx={{ color: "#fff", zIndex: 4 }}
+        open={isDragging}
+        onDragEnd={() => setIsDragging(false)}
+      />
+      <Box ref={scrollToRef} />
+      <TopBar />
+      <ContentBox>
+        {!error && isLoading && isAddressValid && <Box sx={{ marginTop: 4 }}>Loading...</Box>}
+        {!!error && <Box sx={{ marginTop: 4 }}>Error {`${error}`}</Box>}
+        <PositionedContent>
+          {!isLoading && (
+            <ContractDataBox>
+              <ContractBlock />
+              {proofData && proofData.hasOnchainProof && <CompilerBlock />}
+            </ContractDataBox>
+          )}
+          {proofData && (!proofData.hasOnchainProof || canOverride) && (
+            <>
+              <AddSourcesBlock />
+              {hasFiles() && <PublishProof />}
+            </>
+          )}
+          {proofData && !hasFiles() && (
+            <OverflowingBox mb={5}>
+              <ContractSourceCode />
+            </OverflowingBox>
+          )}
+          {proofData && <Footer />}
+        </PositionedContent>
+      </ContentBox>
+      {!proofData && (
+        <CenteringWrapper sx={{ position: "fixed", bottom: 0, width: "100%" }}>
+          <Footer />
+        </CenteringWrapper>
+      )}
+      <div
+        style={{
+          position: "fixed",
+          bottom: 0,
+          left: "calc(50% - 400px)",
+          marginTop: 20,
+          display: "flex",
+          gap: 10,
+          background: "white",
+          borderRadius: 20,
+          padding: "10px 20px",
+          width: 800,
+          zIndex: 99,
+          margin: "auto",
+        }}></div>
+    </AppBox>
   );
 }
 

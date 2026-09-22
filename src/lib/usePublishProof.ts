@@ -1,19 +1,37 @@
-import { useMutation } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { Cell, Address, toNano } from "ton";
+import { useSendTXN, TXNStatus } from "./useSendTxn";
 import { useSubmitSources } from "./useSubmitSources";
-import { useWalletConnect } from "./useWalletConnect";
+import { useLoadContractProof } from "./useLoadContractProof";
 
 export function usePublishProof() {
   const { data } = useSubmitSources();
-  const { requestTXN } = useWalletConnect();
+  const { invalidate, data: contractProofData } = useLoadContractProof();
 
-  return useMutation(async () => {
-    if (!data?.msgCell) return;
+  const m = useSendTXN(
+    Address.parse(import.meta.env.VITE_VERIFIER_REGISTRY),
+    toNano(0.1),
+    data?.result?.msgCell ? Cell.fromBoc(Buffer.from(data.result.msgCell))[0] : new Cell(), // TODO this is a hack
+  );
+  const sleep = async (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    await requestTXN(
-      import.meta.env.VITE_VERIFIER_REGISTRY,
-      toNano(0.05),
-      Cell.fromBoc(Buffer.from(data.msgCell!))[0] // .data?,
-    );
-  });
+  useEffect(() => {
+    if (m.data.status === "success") {
+      let i = 0;
+      (async () => {
+        while (!contractProofData?.hasOnchainProof && i < 20) {
+          i++;
+          await sleep(2000);
+          invalidate();
+        }
+      })();
+    }
+  }, [m.data.status]);
+
+  return {
+    mutate: m.mutate,
+    status: contractProofData?.hasOnchainProof
+      ? "deployed"
+      : (m.data.status as TXNStatus | "deployed"),
+  };
 }

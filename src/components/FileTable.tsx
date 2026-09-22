@@ -1,22 +1,12 @@
-import { Switch } from "@mui/material";
+import { IconButton, Switch, Typography } from "@mui/material";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import { FileToUpload, useFileStore } from "../lib/useFileStore";
-import Button from "./Button";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  restrictToParentElement,
-  restrictToVerticalAxis,
-} from "@dnd-kit/modifiers";
-
-/*
-TODO denis - 
-1. add remove file icon on hover
-*/
+import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 
 import {
   DndContext,
@@ -33,61 +23,100 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import DragHandleIcon from "@mui/icons-material/DragHandle";
+import { useHover } from "../lib/useHover";
+import { CenteringBox } from "./common.styled";
+import deleteIcon from "../assets/delete.svg";
+import dndIcon from "../assets/dnd.svg";
+import { BorderLessCell, DirectoryBox, HeaderCell, HR } from "./fileTable.styled";
+import { useSubmitSources } from "../lib/useSubmitSources";
+import { STEPS, usePublishStore } from "../lib/usePublishSteps";
 
 function Cells({
   file,
   pos,
+  isHover,
 }: {
   file: FileToUpload;
   pos: number;
   isDragging: boolean;
+  isHover: boolean;
 }) {
   const fileName = file.fileObj.name;
-  const { attributes, listeners } = useSortable({ id: fileName });
+  const { attributes, listeners } = useSortable({
+    id: fileName,
+  });
 
   const { setInclueInCommand, setDirectory, removeFile } = useFileStore();
 
+  const { data } = useSubmitSources();
+  const { step } = usePublishStore();
+
+  const canPublish = !!data?.result?.msgCell;
+
   return (
     <>
-      <TableCell {...attributes} {...listeners}>
-        <div style={{ cursor: "pointer" }}>
-          <DragHandleIcon sx={{ opacity: 0.5 }} />
-        </div>
-      </TableCell>
-      <TableCell>
-        {pos}
-      </TableCell>
-      <TableCell>
-        <input
+      <BorderLessCell sx={{ paddingLeft: 1 }} {...attributes} {...listeners}>
+        <CenteringBox sx={{ color: "#D8D8D8" }}>
+          {pos}.
+          <CenteringBox
+            ml={2}
+            style={{
+              cursor: "pointer",
+              visibility: isHover ? "visible" : "hidden",
+            }}>
+            <img src={dndIcon} alt="Drag n drop icon" width={24} height={24} />
+          </CenteringBox>
+        </CenteringBox>
+      </BorderLessCell>
+      <BorderLessCell>
+        <DirectoryBox
+          disabled={step === STEPS.PUBLISH && canPublish}
+          value={file.folder}
           onChange={(e) => {
             setDirectory(fileName, e.target.value);
-          }}
-        />
-      </TableCell>
-      <TableCell>{file.fileObj.name}</TableCell>
-      <TableCell>
+          }}></DirectoryBox>
+      </BorderLessCell>
+      <BorderLessCell>
+        <CenteringBox
+          sx={{ flexDirection: "column", justifyContent: "center", alignItems: "flex-start" }}>
+          <Typography sx={{ fontSize: 14 }}>{file.fileObj.name}</Typography>
+          <Typography sx={{ fontSize: 12, color: "#C1C1C1" }}>{file.fileObj.size} bytes</Typography>
+        </CenteringBox>
+      </BorderLessCell>
+      <BorderLessCell>
         <Switch
+          disabled={step === STEPS.PUBLISH && canPublish}
           checked={file.includeInCommand}
           onChange={(e) => {
             setInclueInCommand(fileName, e.target.checked);
           }}
         />
-      </TableCell>
-      <TableCell>
-        <Button
+      </BorderLessCell>
+      <BorderLessCell align="right">
+        <IconButton
+          sx={{
+            visibility: isHover ? "visible" : "hidden",
+            opacity: 0.5,
+            cursor: "pointer",
+            marginRight: 1,
+          }}
           onClick={() => {
             removeFile(fileName);
-          }}
-          text="remove"
-        />
-      </TableCell>
+          }}>
+          <img src={deleteIcon} alt="Delete icon" width={18} height={18} />
+        </IconButton>
+      </BorderLessCell>
     </>
   );
 }
 
 function SortableRow({ file, pos }: { file: FileToUpload; pos: number }) {
   const fileName = file.fileObj.name;
+  const { hoverRef, isHover } = useHover();
+  const { data } = useSubmitSources();
+  const { step } = usePublishStore();
+
+  const canPublish = !!data?.result?.msgCell;
 
   const { setNodeRef, transform, transition, isDragging } = useSortable({
     id: fileName,
@@ -98,22 +127,47 @@ function SortableRow({ file, pos }: { file: FileToUpload; pos: number }) {
     transition,
   };
 
+  if (step === STEPS.PUBLISH && canPublish) {
+    return (
+      <TableRow sx={{ height: 60 }}>
+        <Cells file={file} pos={pos} isDragging={false} isHover={false} />
+      </TableRow>
+    );
+  }
+
   return (
-    <TableRow key={fileName} ref={setNodeRef} style={style}>
-      <Cells file={file} pos={pos} isDragging={isDragging} />
+    <TableRow
+      sx={{
+        height: 60,
+        transition: ".15s all",
+        "&:hover": {
+          background: "#FAFAFA",
+        },
+      }}
+      key={fileName}
+      ref={(r) => {
+        setNodeRef(r);
+        hoverRef.current = r;
+      }}
+      style={style}>
+      <Cells file={file} pos={pos} isDragging={isDragging} isHover={isHover} />
     </TableRow>
   );
 }
 
 export function FileTable() {
   const { files, reorderFiles } = useFileStore();
+  const { data } = useSubmitSources();
+  const { step } = usePublishStore();
+
+  const canPublish = !!data?.result?.msgCell;
 
   const sensors = useSensors(
     useSensor(MouseSensor, {}),
     useSensor(TouchSensor, {}),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   function handleDragEnd(event: any) {
@@ -129,33 +183,47 @@ export function FileTable() {
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragEnd={handleDragEnd}
-      modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-    >
+      modifiers={[restrictToVerticalAxis, restrictToParentElement]}>
       <TableContainer>
-        <Table sx={{ minWidth: 650 }} aria-label="simple table">
-          <TableHead>
+        <Table sx={{ minWidth: 650 }}>
+          <TableHead
+            sx={{
+              "&.MuiTableHead-root th": {
+                border: "none",
+              },
+            }}>
+            <TableRow sx={{ fontWeight: 700 }}>
+              <HeaderCell sx={{ paddingLeft: 0, width: 70 }}>Order</HeaderCell>
+              <HeaderCell>Directory</HeaderCell>
+              <HeaderCell sx={{ width: 300 }}>File</HeaderCell>
+              <HeaderCell sx={{ width: 150 }}>Include in command</HeaderCell>
+              <HeaderCell sx={{ width: 100 }}></HeaderCell>
+            </TableRow>
             <TableRow>
-              <TableCell></TableCell>
-              <TableCell>Order</TableCell>
-              <TableCell>Directory</TableCell>
-              <TableCell>File</TableCell>
-              <TableCell>Include in command</TableCell>
-              <TableCell>Remove</TableCell>
+              <BorderLessCell sx={{ paddingBottom: 2 }}>
+                <HR />
+              </BorderLessCell>
+              <BorderLessCell sx={{ paddingBottom: 2 }}>
+                <HR />
+              </BorderLessCell>
+              <BorderLessCell sx={{ paddingBottom: 2 }}>
+                <HR />
+              </BorderLessCell>
+              <BorderLessCell sx={{ paddingBottom: 2 }}>
+                <HR />
+              </BorderLessCell>
+              <BorderLessCell sx={{ paddingBottom: 2 }}>
+                <HR />
+              </BorderLessCell>
             </TableRow>
           </TableHead>
           <TableBody>
             <SortableContext
+              disabled={step === STEPS.PUBLISH && canPublish}
               items={files.map((file) => file.fileObj.name)}
-              strategy={verticalListSortingStrategy}
-            >
+              strategy={verticalListSortingStrategy}>
               {files.map((file, i) => {
-                return (
-                  <SortableRow
-                    file={file}
-                    pos={i + 1}
-                    key={file.fileObj.name}
-                  />
-                );
+                return <SortableRow file={file} pos={i + 1} key={file.fileObj.name} />;
               })}
             </SortableContext>
           </TableBody>
